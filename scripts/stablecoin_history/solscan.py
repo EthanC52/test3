@@ -10,7 +10,7 @@ from typing import Any
 from .http import RetryingSession, SourceError
 from .storage import HistorySpec, atomic_write_json, load_history, upsert_daily_points
 
-SOLSCAN_META_URL = "https://pro-api.solscan.io/v2.0/token/meta"
+SOLSCAN_META_URL = "https://pro-api.solscan.io/playground/token/meta"
 
 
 @dataclass(frozen=True)
