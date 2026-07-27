@@ -1,0 +1,84 @@
+name: Update Dashboard Data
+
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stablecoin-data-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check requests
+
+      - name: Validate existing history files
+        continue-on-error: true
+        run: python scripts/validate_history_files.py
+
+      - name: Update EURCV Ethereum (Etherscan free tier)
+        continue-on-error: true
+        env:
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+        run: python scripts/fetch_data.py
+
+      - name: Update USDCV Ethereum (Etherscan free tier)
+        continue-on-error: true
+        env:
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+        run: python scripts/fetch_usdcv_eth_data.py
+
+      - name: Update EURCV Solana (Solscan Playground/free tier)
+        continue-on-error: true
+        env:
+          SOLSCAN_API_KEY: ${{ secrets.SOLSCAN_API_KEY }}
+        run: python scripts/fetch_sol_data.py
+
+      - name: Update USDCV Solana (Solscan Playground/free tier)
+        continue-on-error: true
+        env:
+          SOLSCAN_API_KEY: ${{ secrets.SOLSCAN_API_KEY }}
+        run: python scripts/fetch_usdcv_sol_data.py
+
+      - name: Update XRPL
+        continue-on-error: true
+        run: python scripts/fetch_xrpl_data.py
+
+      - name: Update Stellar
+        continue-on-error: true
+        run: python scripts/fetch_stellar_data.py
+
+      - name: Remove obsolete local files
+        run: |
+          rm -rf .claude
+          rm -f data/sol_known_holders.json data/usdcv_sol_known_holders.json
+          rm -f data/eurusd_rates.json scripts/fetch_eurusd_rates.py
+
+      - name: Commit updated histories
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet && exit 0
+          git commit -m "chore: update chain histories $(date -u '+%Y-%m-%dT%H:%MZ')"
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push && exit 0
+            sleep $((attempt * 5))
+          done
+          exit 1
