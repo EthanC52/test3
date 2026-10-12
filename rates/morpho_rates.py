@@ -10,6 +10,8 @@ Deux méthodes :
   - api : API GraphQL officielle de Morpho (https://api.morpho.org/graphql).
 
 Exemples :
+  python morpho_rates.py                       (lit query.json : double-clic possible)
+  python morpho_ui.pyw                         (interface graphique)
   python morpho_rates.py --start 2025-09-01
   python morpho_rates.py --start 2025-09-01 --end 2025-10-01 --interval 4h
   python morpho_rates.py --start 2025-09-01 --method api --markets "cbBTC/USDC 86%"
@@ -80,8 +82,19 @@ CSV_COLUMNS = [
 ]
 
 
+_LOG_SINK = None  # fonction de redirection des logs (utilisée par l'interface graphique)
+
+
+def set_logger(fn) -> None:
+    global _LOG_SINK
+    _LOG_SINK = fn
+
+
 def log(msg: str) -> None:
-    print(msg, file=sys.stderr, flush=True)
+    if _LOG_SINK:
+        _LOG_SINK(msg)
+    else:
+        print(msg, file=sys.stderr, flush=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -539,40 +552,94 @@ def fmt_pct(x) -> str:
     return "" if x is None or (isinstance(x, float) and math.isnan(x)) else f"{x * 100:.6f}"
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description="Historique des taux borrow/supply de markets Morpho Blue (ETH / Base).")
-    ap.add_argument("--start", required=True, type=parse_date, help="Date de début (UTC), ex : 2025-01-01 ou '2025-01-01 12:00'")
-    ap.add_argument("--end", type=parse_date, default=None, help="Date de fin (UTC). Défaut : maintenant")
-    ap.add_argument("--interval", type=parse_interval, default=3600, help="Récurrence : 15m, 1h (défaut), 4h, 1d...")
-    ap.add_argument("--method", choices=["rpc", "api"], default="rpc", help="Source des données (défaut : rpc)")
-    ap.add_argument("--config", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "markets.json"),
-                    help="Fichier JSON des markets (défaut : markets.json à côté du script)")
-    ap.add_argument("--markets", default=None,
-                    help="Filtre : noms ou ids séparés par des virgules (défaut : tous les markets du JSON)")
-    ap.add_argument("--output", "-o", default=None, help="Fichier CSV de sortie")
-    ap.add_argument("--workers", type=int, default=8, help="Requêtes RPC parallèles (défaut : 8)")
-    ap.add_argument("--sep", default=",", help="Séparateur CSV (';' pour Excel FR)")
-    args = ap.parse_args()
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_QUERY_FILE = os.path.join(SCRIPT_DIR, "query.json")
 
-    end = args.end if args.end is not None else int(time.time())
-    end = min(end, int(time.time()))
-    if args.start > end:
-        sys.exit("Erreur : --start est après --end")
-    timestamps = list(range(args.start, end + 1, args.interval))
-    if not timestamps:
-        sys.exit("Erreur : aucun point dans la période")
+DEFAULT_QUERY = {
+    "start": "2025-09-01",   # date de début (UTC)
+    "end": "",               # date de fin (UTC), vide = maintenant
+    "interval": "1h",        # 15m, 1h, 4h, 1d...
+    "method": "rpc",         # rpc ou api
+    "markets": [],           # noms ou ids à traiter, vide = tous ceux de markets.json
+    "output": "",            # chemin du CSV, vide = nom automatique à côté du script
+    "sep": ";",              # séparateur CSV
+    "workers": 8,            # requêtes RPC parallèles
+    "config": "markets.json",
+}
 
-    cfg = load_config(args.config)
+QUERY_HELP = {
+    "start": "Date de début UTC : 2025-09-01 ou '2025-09-01 12:00'",
+    "end": "Date de fin UTC, vide = maintenant",
+    "interval": "Récurrence : 15m, 30m, 1h, 4h, 1d, 1w",
+    "method": "rpc (défaut, on-chain) ou api (API Morpho)",
+    "markets": "Liste de noms ou d'ids issus de markets.json ; [] = tous",
+    "output": "Chemin du CSV ; vide = nom automatique dans le dossier du script",
+    "sep": "Séparateur CSV : ';' pour Excel FR, ',' sinon",
+    "workers": "Nombre de requêtes RPC en parallèle",
+    "config": "Fichier JSON des markets (chemin relatif au script)",
+}
+
+
+def _resolve(path: str) -> str:
+    return path if os.path.isabs(path) else os.path.join(SCRIPT_DIR, path)
+
+
+def load_query(path: str = DEFAULT_QUERY_FILE) -> dict:
+    q = dict(DEFAULT_QUERY)
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            q.update({k: v for k, v in json.load(f).items() if not k.startswith("_")})
+    return q
+
+
+def save_query(q: dict, path: str = DEFAULT_QUERY_FILE) -> None:
+    data = {k: q.get(k, v) for k, v in DEFAULT_QUERY.items()}
+    data["_aide"] = QUERY_HELP
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+
+def list_markets(config: str = "markets.json") -> list[dict]:
+    return load_config(_resolve(config))["markets"]
+
+
+def run(q: dict) -> tuple[str, int]:
+    """Exécute une query (dict au format de query.json). Retourne (chemin du CSV, nb de lignes)."""
+    q = {**DEFAULT_QUERY, **q}
+    now = int(time.time())
+    start = parse_date(str(q["start"]))
+    end = parse_date(str(q["end"])) if str(q.get("end") or "").strip() else now
+    end = min(end, now)
+    interval = parse_interval(str(q["interval"]))
+    method = str(q["method"]).strip().lower()
+    if method not in ("rpc", "api"):
+        raise ValueError(f"method doit être 'rpc' ou 'api' (reçu : {method!r})")
+    if start > end:
+        raise ValueError("La date de début est après la date de fin")
+    timestamps = list(range(start, end + 1, interval))
+
+    cfg = load_config(_resolve(q["config"]))
     markets = cfg["markets"]
-    if args.markets:
-        wanted = {w.strip().lower() for w in args.markets.split(",")}
+    wanted = q.get("markets") or []
+    if isinstance(wanted, str):
+        wanted = [w for w in wanted.split(",") if w.strip()]
+    if wanted:
+        wanted = {w.strip().lower() for w in wanted}
         markets = [m for m in markets if m["id"] in wanted or m["name"].lower() in wanted]
     if not markets:
-        sys.exit("Erreur : aucun market sélectionné (vérifie le JSON / --markets)")
+        raise ValueError("Aucun market sélectionné (vérifie markets.json / le champ markets)")
 
     def iso(t): return datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%d %H:%M")
-    out = args.output or f"morpho_rates_{args.method}_{iso(args.start)[:10]}_{iso(end)[:10]}.csv"
-    log(f"Méthode {args.method.upper()} | {iso(args.start)} -> {iso(end)} UTC | pas {args.interval}s "
+    out = str(q.get("output") or "").strip() or \
+        f"morpho_rates_{method}_{iso(start)[:10]}_{iso(end)[:10]}.csv"
+    out = _resolve(out)
+    sep = str(q.get("sep") or ",")
+    if sep.lower() in ("\\t", "tab"):
+        sep = "\t"
+    workers = max(1, int(q.get("workers") or 8))
+
+    log(f"Méthode {method.upper()} | {iso(start)} -> {iso(end)} UTC | pas {interval}s "
         f"| {len(timestamps)} points x {len(markets)} market(s)")
 
     rpcs, finders = {}, {}
@@ -580,14 +647,14 @@ def main() -> None:
     for m in markets:
         log(f"\n> {m['name'] or m['id']} ({m['chain']})")
         try:
-            if args.method == "rpc":
+            if method == "rpc":
                 ch = m["chain"]
                 if ch not in rpcs:
                     rpcs[ch] = Rpc(cfg["rpc"].get(ch, []))
                     finders[ch] = BlockFinder(rpcs[ch], CHAINS[ch]["anchor_block"])
-                rows = fetch_rpc(m, timestamps, rpcs[ch], finders[ch], args.workers)
+                rows = fetch_rpc(m, timestamps, rpcs[ch], finders[ch], workers)
             else:
-                rows = fetch_api(m, timestamps, args.interval)
+                rows = fetch_api(m, timestamps, interval)
         except Exception as e:
             log(f"  ERREUR : {e}")
             continue
@@ -600,14 +667,48 @@ def main() -> None:
                 "borrow_apr_pct": fmt_pct(r["borrow_apr"]), "supply_apr_pct": fmt_pct(r["supply_apr"]),
                 "utilization_pct": fmt_pct(r["utilization"]), "fee_pct": fmt_pct(r["fee"]),
                 "total_supply": r["total_supply"], "total_borrow": r["total_borrow"],
-                "loan_token": r["loan_token"], "method": args.method,
+                "loan_token": r["loan_token"], "method": method,
             })
 
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     with open(out, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=CSV_COLUMNS, delimiter=args.sep)
+        w = csv.DictWriter(f, fieldnames=CSV_COLUMNS, delimiter=sep)
         w.writeheader()
         w.writerows(all_rows)
     log(f"\nCSV écrit : {out} ({len(all_rows)} lignes)")
+    return out, len(all_rows)
+
+
+def main() -> None:
+    """Sans argument : exécute query.json (double-clic possible).
+    Avec arguments : chaque option surcharge la valeur de query.json."""
+    ap = argparse.ArgumentParser(description="Historique des taux borrow/supply de markets Morpho Blue (ETH / Base). "
+                                             "Sans argument, les paramètres sont lus dans query.json.")
+    ap.add_argument("--query", default=DEFAULT_QUERY_FILE, help="Fichier de paramètres (défaut : query.json)")
+    ap.add_argument("--start", help="Date de début (UTC), ex : 2025-01-01 ou '2025-01-01 12:00'")
+    ap.add_argument("--end", help="Date de fin (UTC). Défaut : maintenant")
+    ap.add_argument("--interval", help="Récurrence : 15m, 1h, 4h, 1d...")
+    ap.add_argument("--method", choices=["rpc", "api"])
+    ap.add_argument("--config", help="Fichier JSON des markets")
+    ap.add_argument("--markets", help="Filtre : noms ou ids séparés par des virgules")
+    ap.add_argument("--output", "-o", help="Fichier CSV de sortie")
+    ap.add_argument("--workers", type=int, help="Requêtes RPC parallèles")
+    ap.add_argument("--sep", help="Séparateur CSV")
+    args = ap.parse_args()
+
+    no_args = len(sys.argv) == 1
+    q = load_query(args.query)
+    for k, v in vars(args).items():
+        if k != "query" and v is not None:
+            q[k] = v
+    try:
+        run(q)
+    except Exception as e:
+        log(f"Erreur : {e}")
+        if not no_args:
+            sys.exit(1)
+    if no_args and sys.platform == "win32":   # double-clic : garder la fenêtre ouverte
+        input("\nAppuie sur Entrée pour fermer...")
 
 
 if __name__ == "__main__":
