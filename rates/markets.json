@@ -1,0 +1,23 @@
+{
+  "rpc": {
+    "ethereum": ["https://eth.drpc.org", "https://mainnet.gateway.tenderly.co"],
+    "base": ["https://mainnet.base.org", "https://base.drpc.org"]
+  },
+  "markets": [
+    {
+      "name": "wstETH/USDC 86%",
+      "chain": "ethereum",
+      "id": "0xb323495f7e4148be5643a4ea4a8221eef163e4bccfdedc2a6f4696baacbc86cc"
+    },
+    {
+      "name": "wstETH/WETH 94.5%",
+      "chain": "ethereum",
+      "id": "0xc54d7acf14de29e0e5527cabd7a576506870346a78a11a6762e2cca66322ec41"
+    },
+    {
+      "name": "cbBTC/USDC 86%",
+      "chain": "base",
+      "id": "0x9103c3b4e834476c9a62ea009ba2c884ee42e94e6e314a26f04d312434191836"
+    }
+  ]
+}
