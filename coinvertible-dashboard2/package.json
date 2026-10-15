@@ -1,0 +1,11 @@
+{
+  "name": "coinvertible-dashboard",
+  "private": true,
+  "type": "module",
+  "description": "Static site, no build. package.json only exists so Node treats src/*.js as ES modules for tests.",
+  "scripts": {
+    "test": "node --test test/unit.test.mjs",
+    "smoke": "NODE_USE_ENV_PROXY=1 node test/live-smoke.mjs",
+    "serve": "python3 -m http.server 8080"
+  }
+}
