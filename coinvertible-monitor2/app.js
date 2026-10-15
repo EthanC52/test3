@@ -369,6 +369,18 @@ export class RpcPool {
     return m;
   }
 
+  /** Largest value of a numeric endpoint field among endpoints passing filter (healthy ones first). */
+  maxOf(field, filter = () => true) {
+    const now = Date.now();
+    let healthy = -Infinity, any = -Infinity;
+    for (const ep of this.eps) {
+      if (!filter(ep)) continue;
+      any = Math.max(any, ep[field]);
+      if (now >= ep.cooldownUntil) healthy = Math.max(healthy, ep[field]);
+    }
+    return Number.isFinite(healthy) ? healthy : any;
+  }
+
   health() {
     const now = Date.now();
     return this.eps.map((ep) => ({ id: ep.id, url: ep.url, healthy: now >= ep.cooldownUntil, cooldownMs: Math.max(0, ep.cooldownUntil - now), lastError: ep.lastError }));
@@ -1336,7 +1348,9 @@ export class TickContext {
     const pool = this.adapter.pool;
     const depth = this.head - from;
     const canDepth = (ep) => ep.capabilities.has("logs") && ep.logDepth >= this.head - from;
-    let size = pool.minOf("maxLogRange", canDepth);
+    // Chunks sized for the most capable endpoint: each chunk only goes to endpoints whose
+    // maxLogRange covers it, so small-range endpoints still serve the per-block refresh.
+    let size = pool.maxOf("maxLogRange", canDepth);
     if (!Number.isFinite(size)) {
       throw new RpcError(`no endpoint serves logs ${depth} blocks deep on ${this.chain} (add one with log history)`, { kind: "depth" });
     }

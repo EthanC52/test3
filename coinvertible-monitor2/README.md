@@ -2,7 +2,7 @@
 
 > **Status:** v0.3.1 — first working version of the data layer, with a plain functional UI to check the numbers.
 > The visual design comes later. Decisions are logged in §14, open questions in §13.
-> v0.3.1: same code and behaviour as v0.3, packed into 5 files for easier transfer.
+> v0.3.2: endpoints restricted to the RPCs that pass the corporate proxy; log ranges sized for the most capable endpoint.
 
 Static site (no build, no server) for GitHub Enterprise Pages. Everything is read **from the browser**:
 RPC first, third-party APIs only for discovery, logos and volumes.
@@ -85,10 +85,10 @@ Public endpoints only (the file is readable by anyone who can open the site). Me
 
 | Chain | Endpoints | Notes |
 |---|---|---|
-| Ethereum | publicnode, Tenderly public gateway, MEV Blocker, dRPC | publicnode serves logs only for the last ~10,000 blocks; Tenderly and MEV Blocker serve older logs (10k-block ranges); dRPC used for `eth_call` only (its free plan rejects historical `eth_getLogs`). All accept 300-sub-call Multicalls. |
-| Solana | publicnode, Tatum, Solana Vibe Station | **`api.mainnet-beta.solana.com` cannot be used**: it answers 403 to any request sent from a web page. |
-| Stellar | SDF Horizon | Stellar Expert answers 403 to cross-origin requests, so it cannot be used from the page. |
-| XRPL | xrplcluster.com, xrpl.link | `s1/s2.ripple.com` answer but send no CORS header, so a browser cannot read them. |
+| Ethereum | NOWNodes, Pocket, SwiftNodes, BlockMachine (calls + logs with full history); Nodies, Nodies POKT (calls + logs up to 50 blocks); bloXroute x4, Stakely, BlockPI (calls only) | Only RPCs that pass the corporate proxy, without API keys (tested 2026-10-15). Log scans go to the endpoints with long ranges; the per-block refresh can use any endpoint with logs. Not used: Alchemy demo / RPCFast (API keys), Fullsend (no CORS), Tatum (`eth_call` paid only), Flashbots Protect (no `eth_call`, silently empty old logs), MeowRPC (no `eth_call` / `eth_getLogs`), PublicNode and dRPC (blocked by the proxy). |
+| Solana | Solana Vibe Station, Solana Tracker | Uniblock has no CORS; the Solana Foundation endpoints are blocked by the proxy (and refuse web pages anyway). |
+| Stellar | SDF Horizon | Not in the proxy test yet - to check. Stellar Expert refuses cross-origin requests. |
+| XRPL | xrplcluster.com, xrpl.link | Not in the proxy test yet - to check. `s1/s2.ripple.com` send no CORS header. |
 
 The pool learns tighter limits at runtime: an endpoint that answers "range too large" gets a smaller `maxLogRange`, one that answers "archive required" gets a smaller `logDepth`.
 

@@ -19,8 +19,15 @@ globalThis.CV_CONFIG = {
    *   maxMulticallSize  EVM only: max sub-calls in one Multicall3 eth_call
    *   maxLogRange       EVM only: max blocks per eth_getLogs
    *   logDepth          EVM only: how far back (blocks from head) the endpoint serves logs. Omit = unlimited.
-   * Limits measured on 2026-10-15. The pool also learns tighter limits at runtime.
+   * Endpoint list = the RPCs that pass the corporate proxy (tested 2026-10-15), without API keys.
+   * Capabilities and limits measured the same day. The pool also learns tighter limits at runtime.
    * Users can override the endpoints of a chain with the settings button (stored in their browser only).
+   * Not used, on purpose:
+   *   Ethereum: Alchemy demo key, RPCFast (API keys) - Fullsend (no CORS) - Tatum (eth_call paid only,
+   *             logs limited to 100 blocks) - Flashbots Protect (no eth_call, returns empty logs instead of
+   *             an error on old blocks) - MeowRPC (no eth_call, no eth_getLogs) - PublicNode, dRPC (blocked
+   *             by the proxy).
+   *   Solana:   Uniblock (no CORS) - api.mainnet(-beta).solana.com (blocked by the proxy; also refuses web pages).
    * ------------------------------------------------------------------------------------------ */
   chains: {
     ethereum: {
@@ -33,14 +40,28 @@ globalThis.CV_CONFIG = {
       confirmations: 0, // eth_call reads at head - confirmations
       logConfirmations: 2, // eth_getLogs stops at head - 2 (protects against 1-2 block reorgs)
       endpoints: [
-        { id: "publicnode", url: "https://ethereum-rpc.publicnode.com", maxRps: 3, weight: 2,
-          capabilities: ["calls", "logs"], maxMulticallSize: 150, maxLogRange: 9500, logDepth: 9500 },
-        { id: "tenderly", url: "https://gateway.tenderly.co/public/mainnet", maxRps: 2, weight: 1,
+        // eth_call + eth_getLogs with full history (10,000-block ranges)
+        { id: "nownodes", url: "https://public-eth.nownodes.io", maxRps: 2, weight: 2,
           capabilities: ["calls", "logs"], maxMulticallSize: 150, maxLogRange: 10000 },
-        { id: "mevblocker", url: "https://rpc.mevblocker.io", maxRps: 2, weight: 1,
+        { id: "pocket", url: "https://eth.api.pocket.network", maxRps: 2, weight: 2,
           capabilities: ["calls", "logs"], maxMulticallSize: 150, maxLogRange: 10000 },
-        { id: "drpc", url: "https://eth.drpc.org", maxRps: 2, weight: 1,
-          capabilities: ["calls"], maxMulticallSize: 150 },
+        { id: "swiftnodes", url: "https://rpc.swiftnodes.io/rpc/eth", maxRps: 2, weight: 2,
+          capabilities: ["calls", "logs"], maxMulticallSize: 150, maxLogRange: 10000 },
+        { id: "blockmachine", url: "https://rpc-eth.blockmachine.io", maxRps: 2, weight: 1,
+          capabilities: ["calls", "logs"], maxMulticallSize: 150, maxLogRange: 9999 },
+        // eth_call + eth_getLogs limited to 50 blocks (enough for the per-block refresh, not for history)
+        { id: "nodies", url: "https://ethereum-public.nodies.app", maxRps: 1, weight: 1,
+          capabilities: ["calls", "logs"], maxMulticallSize: 150, maxLogRange: 50 },
+        { id: "nodies-pokt", url: "https://eth-pokt.nodies.app", maxRps: 1, weight: 1,
+          capabilities: ["calls", "logs"], maxMulticallSize: 150, maxLogRange: 50 },
+        // eth_call only (eth_getLogs not available or unreliable without an account)
+        { id: "bloxroute", url: "https://eth.rpc.blxrbdn.com/", maxRps: 1, weight: 1, capabilities: ["calls"], maxMulticallSize: 150 },
+        { id: "bloxroute-sg", url: "https://singapore.rpc.blxrbdn.com/", maxRps: 1, weight: 1, capabilities: ["calls"], maxMulticallSize: 150 },
+        { id: "bloxroute-uk", url: "https://uk.rpc.blxrbdn.com/", maxRps: 1, weight: 1, capabilities: ["calls"], maxMulticallSize: 150 },
+        { id: "bloxroute-va", url: "https://virginia.rpc.blxrbdn.com/", maxRps: 1, weight: 1, capabilities: ["calls"], maxMulticallSize: 150 },
+        // stakely: small free quota, sometimes answers "not available for unregistered accounts"; the pool backs off.
+        { id: "stakely", url: "https://ethereum-json-rpc.stakely.io", maxRps: 1, weight: 1, capabilities: ["calls"], maxMulticallSize: 150 },
+        { id: "blockpi", url: "https://ethereum.public.blockpi.network/v1/rpc/public", maxRps: 1, weight: 1, capabilities: ["calls"], maxMulticallSize: 150 },
       ],
     },
 
@@ -49,11 +70,9 @@ globalThis.CV_CONFIG = {
       label: "Solana",
       enabled: true,
       explorer: { tx: "https://solscan.io/tx/", address: "https://solscan.io/account/" },
-      // api.mainnet-beta.solana.com is NOT usable here: it answers 403 to any request sent from a web page.
       endpoints: [
-        { id: "publicnode", url: "https://solana-rpc.publicnode.com", maxRps: 2, weight: 2 },
-        { id: "tatum", url: "https://solana-mainnet.gateway.tatum.io", maxRps: 1, weight: 1 },
         { id: "solanavibestation", url: "https://public.rpc.solanavibestation.com", maxRps: 1, weight: 1 },
+        { id: "solanatracker", url: "https://rpc.solanatracker.io/public", maxRps: 1, weight: 1 },
       ],
     },
 
