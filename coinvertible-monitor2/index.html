@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CoinVertible Dashboard</title>
+  <meta name="description" content="EURCV and USDCV supply, mint/burn, Morpho and Uniswap data read on-chain." />
+  <style>
+    /* Functional styling only - the UI will be redesigned later. */
+    :root {
+      --ink: #1a1a1a; --muted: #6b6b6b; --line: #e2e2e2; --bg: #fff; --paper: #f6f6f4;
+      --ok: #1f7a4a; --warn: #a86400; --err: #b3261e;
+      --yellow: #e0b400; --green: #2e9e5b; --orange: #e07a1f; --red: #d23b2f;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); font-variant-numeric: tabular-nums; }
+    header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+    nav { display: flex; gap: 4px; flex-wrap: wrap; }
+    nav a { padding: 6px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; }
+    nav a.active { background: var(--ink); color: #fff; }
+    .role { margin-left: auto; color: var(--muted); font-size: 12px; }
+    main { padding: 16px; max-width: 1200px; margin: 0 auto; }
+    section { margin-bottom: 28px; }
+    h2 { font-size: 18px; margin: 0 0 8px; }
+    h3 { font-size: 15px; margin: 0 0 6px; }
+    h4 { margin: 12px 0 4px; }
+    .muted { color: var(--muted); font-weight: normal; }
+    table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { font-size: 12px; color: var(--muted); font-weight: 600; }
+    td.r, th.r { text-align: right; }
+    table.small td, table.small th { padding: 3px 6px; font-size: 12px; }
+    td.err { color: var(--err); max-width: 360px; overflow-wrap: anywhere; }
+    tr.other td { background: var(--paper); }
+    .cards { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0; }
+    .card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; flex: 1 1 320px; min-width: 0; }
+    .big { font-size: 22px; font-weight: 700; }
+    .big2 { font-weight: 700; }
+    .sub { font-size: 12px; color: var(--muted); }
+    .sources { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 8px; }
+    .src { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--paper); border: 1px solid var(--line); }
+    .src.ok::before { content: "\25CF  "; color: var(--ok); }
+    .src.stale::before, .src.partial::before { content: "\25CF  "; color: var(--warn); }
+    .src.error::before { content: "\25CF  "; color: var(--err); }
+    .banner { padding: 8px 12px; margin: 6px 16px; border-radius: 6px; font-size: 13px; }
+    main .banner { margin: 6px 0; }
+    .banner.error { background: #fde8e6; color: var(--err); }
+    .banner.warn { background: #fff4e0; color: var(--warn); }
+    .banner.info { background: #e8f0fe; color: #1a4fa0; }
+    .tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--paper); border: 1px solid var(--line); }
+    .tag.mint { color: var(--ok); }
+    .tag.burn { color: var(--err); }
+    .tag.warn { color: var(--warn); }
+    .bar { height: 8px; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; width: 160px; max-width: 100%; }
+    .bar span { display: block; height: 100%; }
+    .band-yellow { background: var(--yellow); } .band-green { background: var(--green); } .band-orange { background: var(--orange); } .band-red { background: var(--red); }
+    .logo { width: 16px; height: 16px; vertical-align: -3px; margin-right: 6px; }
+    code { font-size: 12px; }
+    a { color: inherit; }
+    button.link { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; text-decoration: underline dotted; cursor: pointer; }
+    button.more { margin-top: 6px; padding: 4px 10px; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; cursor: pointer; }
+    footer { padding: 16px; max-width: 1200px; margin: 0 auto; display: flex; gap: 12px; align-items: flex-start; }
+    footer details { flex: 1; min-width: 0; overflow-x: auto; }
+    footer summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+    .gear { background: none; border: 0; color: #bbb; cursor: pointer; font-size: 14px; padding: 2px; }
+    .gear:hover { color: var(--muted); }
+    dialog { border: 1px solid var(--line); border-radius: 8px; max-width: 640px; width: calc(100% - 32px); }
+    dialog label { display: block; margin: 8px 0; font-weight: 600; }
+    dialog textarea { width: 100%; font: 12px ui-monospace, monospace; margin-top: 4px; }
+    dialog .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    @media (max-width: 700px) { th, td { padding: 4px; } .bar { width: 80px; } }
+  </style>
+  <!-- config.js must load before app.js: it defines globalThis.CV_CONFIG -->
+  <script src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <div id="chrome"></div>
+  <main id="app"><p class="muted">Loading...</p></main>
+</body>
+</html>
