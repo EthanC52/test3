@@ -1,0 +1,64 @@
+/* =====================================================================================
+ * Variante 4 - "Paper" (light)
+ * Warm off-white page, white cards with soft shadows, dark ink sidebar (keeps the dark logo
+ * context), a thin SG-red stripe on the top bar. The most legible option for long reading
+ * and for screen sharing / printing. Paste at the end of the <style> block of index.html.
+ * ===================================================================================== */
+:root {
+  --background: #f4f3f0;
+  --card: #ffffff;
+  --sidebar: #121212;
+  --foreground: #151515;
+  --muted: #ecebe7;
+  --muted-foreground: #5a5a5a;
+  --subtle-foreground: #6e6e6e;
+  --border: rgba(20, 20, 20, 0.08);
+  --border-strong: rgba(20, 20, 20, 0.15);
+  --success: #00804a;
+  --error: #d40013;
+  --warning: #c27200;
+  --band-yellow: #c99e00;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(16, 16, 16, 0.05), 0 6px 20px rgba(16, 16, 16, 0.05);
+}
+/* Dark sidebar: the dark-theme tokens apply inside it only */
+.side-col { --foreground: #fafafa; --muted: #262626; --muted-foreground: #a1a1a1; --subtle-foreground: #8a8a8a; --nav-foreground: #d4d4d4; --border: rgba(255, 255, 255, 0.08); color: #fafafa; border-right: 0; }
+.nav.active { background: #262626; box-shadow: inset 2px 0 0 var(--primary); }
+
+.topbar { background: rgba(255, 255, 255, 0.86); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: inset 0 3px 0 var(--primary); }
+.content { padding: 28px 40px 64px; }
+section + section { margin-top: 40px; }
+.sec-head h2 { font-size: 17px; letter-spacing: -0.015em; }
+
+.sources { gap: 8px; margin-bottom: 28px; }
+.src { height: 28px; padding: 0 12px; border-radius: 999px; background: #fff; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(16, 16, 16, 0.04); }
+
+.card { border-color: rgba(20, 20, 20, 0.06); }
+.card-body { padding: 20px 22px; }
+.grid { gap: 20px; }
+.kpi { font-size: 28px; line-height: 36px; }
+.hero { font-size: 40px; line-height: 48px; letter-spacing: -0.03em; }
+.mv-head { padding: 20px 28px 0; }
+.mv-body { padding: 18px 28px 26px; }
+.mv-chart { padding: 0 28px 22px; }
+
+th { background: #faf9f7; height: 42px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--subtle-foreground); }
+td { height: 48px; }
+th:first-child, td:first-child { padding-left: 22px; }
+th:last-child, td:last-child { padding-right: 22px; }
+tbody tr:hover { background: #faf9f6; }
+.list thead th { background: #faf9f7; }
+.card-more:hover { background: #faf9f6; }
+.pool-card:hover { background: #fff; border-color: var(--border-strong); box-shadow: 0 2px 4px rgba(16, 16, 16, 0.06), 0 12px 32px rgba(16, 16, 16, 0.08); }
+.track { height: 5px; border-radius: 3px; }
+.tag { background: #f7f6f3; }
+.c-ct { background: #b9b9b9; } .lchart .b-ct { fill: #b9b9b9; }
+.lchart .bar:hover .b-ct { fill: #8f8f8f; }
+.lchart text.peg { fill: #00804a; }
+.logo { background: #ecebe7; color: #5a5a5a; }
+.side-col .logo { background: #262626; color: #a1a1a1; }
+.area-dot { stroke: #fff; }
+.tooltip { background: #151515; color: #fafafa; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); }
+dialog { box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18); }
+dialog::backdrop { background: rgba(20, 20, 20, 0.35); }
+.peg { background: #f1f0ec; }
