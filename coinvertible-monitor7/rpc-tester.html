@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RPC Tester</title>
+<!--
+  RPC tester for the CoinVertible Dashboard.
+  Open it from the same place as the dashboard (GitHub Pages or a local server), on the PC that will use the
+  dashboard: it then goes through the same corporate proxy and the same browser CORS rules.
+  It tests every URL listed per chain and prints the endpoints in the exact config.js format
+  (id, url, maxRps, weight, capabilities, maxMulticallSize, maxLogRange, logDepth), ready to paste.
+  No data leaves the browser except the test requests themselves.
+-->
+<style>
+  :root { --bg: #0a0a0a; --card: #171717; --fg: #fafafa; --muted: #262626; --mfg: #a1a1a1; --sfg: #737373; --border: rgba(255,255,255,.10); --primary: #e9041e; --ok: #00884b; --err: #e40014; --warn: #f99c00; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 400 14px/20px "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-variant-numeric: tabular-nums; }
+  main { max-width: 1400px; margin: 0 auto; padding: 24px 32px 64px; }
+  h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; }
+  h2 { margin: 0; font-size: 16px; font-weight: 600; }
+  p { margin: 0 0 16px; color: var(--mfg); font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
+  .head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .head label { display: inline-flex; gap: 6px; align-items: center; color: var(--mfg); font-size: 13px; }
+  .head .sp { margin-left: auto; }
+  textarea { width: 100%; min-height: 96px; padding: 10px 16px; border: 0; border-bottom: 1px solid var(--border); background: var(--bg); color: var(--fg); font: 12px/18px ui-monospace, Menlo, Consolas, monospace; resize: vertical; }
+  button { height: 32px; padding: 0 12px; border: 1px solid rgba(255,255,255,.15); border-radius: 6px; background: transparent; color: var(--fg); font: 500 13px var(--font, inherit); cursor: pointer; }
+  button:hover { background: var(--muted); }
+  button.primary { background: var(--primary); border-color: var(--primary); }
+  button:disabled { opacity: .5; cursor: default; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 0 12px; height: 36px; text-align: left; font-size: 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--mfg); font-weight: 500; }
+  td.r, th.r { text-align: right; }
+  .ok { color: #2fbf7a; } .err { color: #ff4d5e; } .warn { color: var(--warn); } .muted { color: var(--sfg); }
+  .note { white-space: normal; max-width: 420px; color: var(--mfg); }
+  pre { margin: 0; padding: 12px 16px; background: var(--bg); color: var(--fg); font: 12px/18px ui-monospace, Menlo, Consolas, monospace; white-space: pre; overflow-x: auto; max-height: 420px; }
+  .tbl { overflow-x: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>RPC Tester</h1>
+  <p>Tests each endpoint from this browser (same proxy and CORS rules as the dashboard) and prints it in the <code>config.js</code> format.
+     One URL per line; lines starting with # are skipped. The lists start with the endpoints of <code>config.js</code> (if found next to this page) followed by known public candidates.
+     A full run sends about 40-60 small requests per endpoint, spread over a few seconds.</p>
+  <div id="chains"></div>
+  <div class="card"><div class="head"><h2>config.js output</h2><span class="muted" id="out-note">Run a chain to fill this.</span><button class="sp" id="copy">Copy</button></div><pre id="out"></pre></div>
+</main>
+<script src="config.js" onerror="void 0"></script>
+<script>
+"use strict";
+/* ------------------------------------------------------------------------------------------------
+ * Chains and candidate endpoints (public, no API key). Edit freely.
+ * ---------------------------------------------------------------------------------------------- */
+var CHAINS = {
+  ethereum: { type: "evm", label: "Ethereum", chainId: 1, usdc: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", candidates: [
+    "https://public-eth.nownodes.io", "https://eth.api.pocket.network", "https://rpc.swiftnodes.io/rpc/eth", "https://rpc-eth.blockmachine.io",
+    "https://ethereum-public.nodies.app", "https://eth-pokt.nodies.app", "https://eth.rpc.blxrbdn.com/", "https://ethereum-json-rpc.stakely.io",
+    "https://ethereum.public.blockpi.network/v1/rpc/public", "https://eth.llamarpc.com", "https://ethereum-rpc.publicnode.com", "https://eth.drpc.org",
+    "https://1rpc.io/eth", "https://rpc.mevblocker.io", "https://eth.merkle.io", "https://cloudflare-eth.com", "https://eth-mainnet.public.blastapi.io",
+    "https://gateway.tenderly.co/public/mainnet", "https://eth.rpc.subquery.network/public", "https://eth.meowrpc.com",
+    "https://endpoints.omniatech.io/v1/eth/mainnet/public", "https://api.zan.top/eth-mainnet", "https://rpc.payload.de"] },
+  base: { type: "evm", label: "Base", chainId: 8453, usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", candidates: [
+    "https://mainnet.base.org", "https://developer-access-mainnet.base.org", "https://base.llamarpc.com", "https://base-rpc.publicnode.com",
+    "https://base.drpc.org", "https://1rpc.io/base", "https://base.meowrpc.com", "https://base-mainnet.public.blastapi.io",
+    "https://base.blockpi.network/v1/rpc/public", "https://endpoints.omniatech.io/v1/base/mainnet/public", "https://base.gateway.tenderly.co",
+    "https://base-public.nodies.app", "https://base.rpc.subquery.network/public", "https://api.zan.top/base-mainnet", "https://base.api.pocket.network"] },
+  solana: { type: "solana", label: "Solana", candidates: [
+    "https://public.rpc.solanavibestation.com", "https://rpc.solanatracker.io/public", "https://api.mainnet-beta.solana.com",
+    "https://solana-rpc.publicnode.com", "https://solana.drpc.org", "https://api.mainnet.solana.com"] },
+  stellar: { type: "stellar", label: "Stellar (Horizon)", candidates: ["https://horizon.stellar.org", "https://horizon.stellar.lobstr.co"] },
+  xrpl: { type: "xrpl", label: "XRP Ledger", candidates: ["https://xrplcluster.com", "https://xrpl.link", "https://s1.ripple.com:51234", "https://s2.ripple.com:51234"] },
+};
+var MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11";
+var TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+var TIMEOUT = 10000;
+var RESULTS = {};
+
+/* Endpoints of config.js first (deduplicated). */
+(function mergeConfig() {
+  var C = window.CV_CONFIG;
+  if (!C || !C.chains) return;
+  Object.keys(C.chains).forEach(function (k) {
+    var c = C.chains[k];
+    if (!CHAINS[k]) CHAINS[k] = { type: c.type, label: c.label || k, chainId: c.chainId, candidates: [] };
+    var urls = (c.endpoints || []).map(function (e) { return e.url; });
+    CHAINS[k].candidates = urls.concat(CHAINS[k].candidates.filter(function (u) { return urls.map(norm).indexOf(norm(u)) < 0; }));
+  });
+})();
+function norm(u) { return String(u).replace(/\/+$/, "").toLowerCase(); }
+
+/* ---------------- helpers ---------------- */
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+function hex(n) { return "0x" + n.toString(16); }
+function idOf(url) {
+  var h = new URL(url).hostname.replace(/^(www|rpc|api|public|mainnet|eth|ethereum)[.-]/, "").split(".");
+  var skip = ["rpc", "public", "api", "mainnet", "eth", "base", "com", "io", "org", "app", "network", "co", "top", "net"];
+  var w = h.filter(function (x) { return skip.indexOf(x) < 0; });
+  return (w[0] || h[0]).replace(/-?(rpc|public|mainnet)-?/g, "") || h[0];
+}
+function median(a) { if (!a.length) return null; var s = a.slice().sort(function (x, y) { return x - y; }); return s[Math.floor(s.length / 2)]; }
+
+/** One HTTP request with timeout; returns { ok, status, ms, json, error, headers } and never throws. */
+async function req(url, init) {
+  var ctrl = new AbortController();
+  var t = setTimeout(function () { ctrl.abort(); }, TIMEOUT);
+  var t0 = performance.now();
+  try {
+    var r = await fetch(url, Object.assign({}, init, { signal: ctrl.signal }));
+    var ms = Math.round(performance.now() - t0);
+    var json = null;
+    try { json = await r.json(); } catch (e) { /* not json */ }
+    return { ok: r.ok, status: r.status, ms: ms, json: json, headers: r.headers, error: r.ok ? null : "HTTP " + r.status };
+  } catch (e) {
+    return { ok: false, status: 0, ms: Math.round(performance.now() - t0), json: null, error: e.name === "AbortError" ? "timeout" : "network/CORS error" };
+  } finally { clearTimeout(t); }
+}
+async function rpc(url, method, params) {
+  var r = await req(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: method, params: params || [] }) });
+  if (r.ok && r.json && r.json.error) { r.ok = false; r.error = (r.json.error.message || JSON.stringify(r.json.error)).slice(0, 160); r.rpcError = true; }
+  r.result = r.json ? r.json.result : undefined;
+  return r;
+}
+
+/** Rate: 12 requests at 4/s, then 12 at 8/s; 429 or errors lower the suggestion. */
+async function rateTest(send) {
+  async function wave(n, rps) {
+    var ps = [], bad = 0, lim = 0;
+    for (var i = 0; i < n; i++) { ps.push(send().then(function (r) { if (!r.ok) { bad++; if (r.status === 429 || /rate|limit|too many/i.test(r.error || "")) lim++; } })); await sleep(1000 / rps); }
+    await Promise.all(ps);
+    return { bad: bad, lim: lim };
+  }
+  var a = await wave(12, 4);
+  if (a.bad) return { maxRps: a.lim ? 0.5 : 1, note: a.lim ? "rate-limited at 4 req/s" : "errors at 4 req/s" };
+  await sleep(1500);
+  var b = await wave(12, 8);
+  if (b.bad) return { maxRps: 1, note: "ok at 4 req/s, " + (b.lim ? "rate-limited" : "errors") + " at 8 req/s" };
+  return { maxRps: 2, note: "ok at 8 req/s (2 kept: the corporate IP is shared)" };
+}
+
+/* ---------------- EVM ---------------- */
+function aggregate3(n) {
+  // n x getBlockNumber() through Multicall3.aggregate3
+  var w = function (v) { return v.toString(16).padStart(64, "0"); };
+  var target = MULTICALL3.slice(2).toLowerCase().padStart(64, "0");
+  var tuple = target + w(1) + w(0x60) + w(4) + "42cbb15c" + "0".repeat(56);
+  var heads = "", off = n * 32;
+  for (var i = 0; i < n; i++) { heads += w(off); off += tuple.length / 2; }
+  return "0x82ad56cb" + w(0x20) + w(n) + heads + tuple.repeat(n);
+}
+
+async function testEvm(url, chain, log) {
+  var R = { url: url, id: idOf(url), notes: [] };
+  var c = await rpc(url, "eth_chainId");
+  if (!c.ok) { R.fail = c.error; return R; }
+  if (Number(c.result) !== chain.chainId) { R.fail = "wrong chain id " + Number(c.result); return R; }
+  var lat = [], head = 0;
+  for (var i = 0; i < 3; i++) { var b = await rpc(url, "eth_blockNumber"); if (b.ok) { lat.push(b.ms); head = Number(b.result); } }
+  if (!head) { R.fail = "eth_blockNumber failed"; return R; }
+  R.p50 = median(lat); R.head = head;
+  log("calls");
+  // eth_call + multicall size
+  var call1 = await rpc(url, "eth_call", [{ to: MULTICALL3, data: aggregate3(1) }, "latest"]);
+  R.calls = call1.ok && call1.result && call1.result.length > 2;
+  if (!R.calls) R.notes.push("eth_call: " + (call1.error || "empty result"));
+  R.maxMulticallSize = 0;
+  if (R.calls) for (var n of [50, 150, 300, 500]) {
+    var m = await rpc(url, "eth_call", [{ to: MULTICALL3, data: aggregate3(n) }, "latest"]);
+    if (!m.ok) break;
+    R.maxMulticallSize = n;
+  }
+  log("logs");
+  // eth_getLogs: must return real logs (USDC transfers over the last 3 blocks)
+  var recent = await rpc(url, "eth_getLogs", [{ address: chain.usdc, topics: [TRANSFER], fromBlock: hex(head - 3), toBlock: hex(head - 1) }]);
+  R.logs = recent.ok && Array.isArray(recent.result) && recent.result.length > 0;
+  if (!recent.ok) R.notes.push("eth_getLogs: " + recent.error);
+  else if (!R.logs) R.notes.push("eth_getLogs returns empty results (unreliable)");
+  R.maxLogRange = 0;
+  if (R.logs) {
+    // largest range accepted (on an address without events, so only the range limit matters)
+    for (var size of [50, 100, 1000, 5000, 10000, 50000, 100000, 1000000, 3000000]) {
+      var g = await rpc(url, "eth_getLogs", [{ address: MULTICALL3, topics: [TRANSFER], fromBlock: hex(Math.max(0, head - size + 1)), toBlock: hex(head) }]);
+      if (!g.ok) break;
+      R.maxLogRange = size;
+    }
+    // depth: old logs must come back non-empty
+    R.logDepth = null;
+    for (var back of [2000000, 500000, 100000, 10000]) {
+      var o = await rpc(url, "eth_getLogs", [{ address: chain.usdc, topics: [TRANSFER], fromBlock: hex(head - back), toBlock: hex(head - back + 20) }]);
+      if (o.ok && Array.isArray(o.result) && o.result.length) { R.logDepth = back >= 2000000 ? null : back; R.depthOk = true; break; }
+    }
+    if (!R.depthOk) { R.logDepth = 0; R.notes.push("old logs not served"); }
+  }
+  log("rate");
+  var rt = await rateTest(function () { return rpc(url, "eth_blockNumber"); });
+  R.maxRps = rt.maxRps; R.notes.push(rt.note);
+  var full = R.logs && R.maxLogRange >= 10000 && R.depthOk && R.logDepth == null;
+  R.weight = R.maxRps >= 2 && R.p50 < 600 && (full || !R.logs) ? 2 : 1;
+  if (!R.calls && !R.logs) R.fail = "neither eth_call nor eth_getLogs usable";
+  return R;
+}
+
+function evmConfig(R) {
+  var caps = [R.calls ? "calls" : null, R.logs ? "logs" : null].filter(Boolean);
+  var s = '{ id: "' + R.id + '", url: "' + R.url + '", maxRps: ' + R.maxRps + ", weight: " + R.weight + ",\n  capabilities: " + JSON.stringify(caps).replace(/,/g, ", ");
+  if (R.calls) s += ", maxMulticallSize: " + Math.min(R.maxMulticallSize || 50, 300);
+  if (R.logs) s += ", maxLogRange: " + R.maxLogRange;
+  if (R.logs && R.logDepth != null) s += ", logDepth: " + R.logDepth;
+  return s + " },";
+}
+
+/* ---------------- Solana / Stellar / XRPL ---------------- */
+async function testSolana(url) {
+  var R = { url: url, id: idOf(url), notes: [] };
+  var lat = [];
+  for (var i = 0; i < 3; i++) { var r = await rpc(url, "getSlot", [{ commitment: "confirmed" }]); if (!r.ok) { R.fail = r.error; return R; } lat.push(r.ms); }
+  R.p50 = median(lat);
+  var mints = [];
+  var C = window.CV_CONFIG;
+  if (C) Object.values(C.tokens || {}).forEach(function (t) { var d = t.deployments && t.deployments.solana; if (d && d.mint) mints.push(d.mint); });
+  if (mints.length) {
+    var m = await rpc(url, "getMultipleAccounts", [mints, { encoding: "jsonParsed", commitment: "confirmed" }]);
+    if (!m.ok || !m.result || !m.result.value) { R.fail = "getMultipleAccounts: " + (m.error || "no value"); return R; }
+  }
+  var rt = await rateTest(function () { return rpc(url, "getSlot", [{ commitment: "confirmed" }]); });
+  R.maxRps = rt.maxRps; R.notes.push(rt.note); R.weight = 1;
+  return R;
+}
+
+async function testStellar(url) {
+  var R = { url: url, id: idOf(url), notes: [] };
+  var base = url.replace(/\/+$/, "");
+  var lat = [];
+  for (var i = 0; i < 3; i++) { var r = await req(base + "/", { method: "GET" }); if (!r.ok) { R.fail = r.error; return R; } lat.push(r.ms); var lim = r.headers.get("x-ratelimit-limit") || r.headers.get("ratelimit-limit"); if (lim) R.hourly = Number(lim); }
+  R.p50 = median(lat);
+  var a = await req(base + "/assets?asset_code=EURCV&limit=1", { method: "GET" });
+  if (!a.ok) { R.fail = "/assets: " + a.error; return R; }
+  // Horizon publishes its quota (requests per hour per IP): stay well below it
+  R.maxRps = R.hourly ? Math.max(0.2, Math.min(2, Math.floor((R.hourly / 3600) * 10) / 10)) : 1;
+  R.notes.push(R.hourly ? "quota " + R.hourly + " req/hour per IP" : "no quota header");
+  R.weight = 1;
+  return R;
+}
+
+async function testXrpl(url) {
+  var R = { url: url, id: idOf(url), notes: [] };
+  var send = function (method, params) { return req(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ method: method, params: [params || {}] }) }); };
+  var lat = [];
+  for (var i = 0; i < 3; i++) { var r = await send("server_info"); if (!r.ok || !r.json || !r.json.result || r.json.result.status !== "success") { R.fail = r.error || "server_info failed"; return R; } lat.push(r.ms); }
+  R.p50 = median(lat);
+  var C = window.CV_CONFIG, issuer = null;
+  if (C) Object.values(C.tokens || {}).forEach(function (t) { var d = t.deployments && t.deployments.xrpl; if (d && d.issuer) issuer = d.issuer; });
+  if (issuer) {
+    var g = await send("gateway_balances", { account: issuer, ledger_index: "validated" });
+    if (!g.ok || !g.json || !g.json.result || g.json.result.status !== "success") { R.fail = "gateway_balances failed"; return R; }
+  }
+  var rt = await rateTest(function () { return send("server_info"); });
+  R.maxRps = rt.maxRps; R.notes.push(rt.note); R.weight = 1;
+  return R;
+}
+
+function simpleConfig(R) { return '{ id: "' + R.id + '", url: "' + R.url + '", maxRps: ' + R.maxRps + ", weight: " + R.weight + " },"; }
+
+/* ---------------- UI ---------------- */
+function render() {
+  var root = document.getElementById("chains");
+  root.innerHTML = Object.keys(CHAINS).map(function (k) {
+    var c = CHAINS[k];
+    return '<div class="card" data-chain="' + k + '"><div class="head"><h2>' + esc(c.label) + '</h2><span class="muted">' + esc(c.type) + (c.chainId ? " \u00b7 chain id " + c.chainId : "") +
+      '</span><span class="muted" data-status></span><button class="sp primary" data-run>Test</button></div>' +
+      '<textarea spellcheck="false">' + esc(c.candidates.join("\n")) + '</textarea><div class="tbl"><table><thead><tr><th>Endpoint</th><th>Result</th><th class="r">p50 ms</th>' +
+      (c.type === "evm" ? '<th>Capabilities</th><th class="r">Multicall</th><th class="r">Log range</th><th>Old logs</th>' : "") +
+      '<th class="r">maxRps</th><th class="r">weight</th><th>Notes</th></tr></thead><tbody></tbody></table></div></div>';
+  }).join("");
+  root.querySelectorAll("[data-run]").forEach(function (b) { b.addEventListener("click", function () { runChain(b.closest("[data-chain]").getAttribute("data-chain")); }); });
+}
+
+async function runChain(k) {
+  var card = document.querySelector('[data-chain="' + k + '"]');
+  var c = CHAINS[k];
+  var urls = card.querySelector("textarea").value.split(/\s+/).map(function (u) { return u.trim(); }).filter(function (u) { return /^https?:\/\//.test(u); });
+  var body = card.querySelector("tbody"), status = card.querySelector("[data-status]"), btn = card.querySelector("[data-run]");
+  btn.disabled = true;
+  body.innerHTML = "";
+  RESULTS[k] = [];
+  // 3 endpoints at a time: different hosts, so their limits are independent
+  var queue = urls.slice(), done = 0;
+  async function worker() {
+    while (queue.length) {
+      var url = queue.shift();
+      var row = document.createElement("tr");
+      row.innerHTML = "<td>" + esc(url) + '</td><td class="muted" colspan="9">testing\u2026</td>';
+      body.appendChild(row);
+      var log = function (step) { row.children[1].textContent = "testing " + step + "\u2026"; };
+      var R;
+      try {
+        R = c.type === "evm" ? await testEvm(url, c, log) : c.type === "solana" ? await testSolana(url) : c.type === "stellar" ? await testStellar(url) : await testXrpl(url);
+      } catch (e) { R = { url: url, id: idOf(url), fail: String(e && e.message || e), notes: [] }; }
+      RESULTS[k].push(R);
+      row.innerHTML = rowHtml(c, R);
+      done++;
+      status.textContent = done + " / " + urls.length;
+      output();
+    }
+  }
+  await Promise.all([worker(), worker(), worker()]);
+  btn.disabled = false;
+  status.textContent = "done \u00b7 " + RESULTS[k].filter(function (r) { return !r.fail; }).length + " usable of " + urls.length;
+}
+
+function rowHtml(c, R) {
+  var res = R.fail ? '<span class="err">' + esc(R.fail) + "</span>" : '<span class="ok">usable</span>';
+  var cells = "<td>" + esc(R.url) + "</td><td>" + res + '</td><td class="r">' + (R.p50 == null ? "" : R.p50) + "</td>";
+  if (c.type === "evm") {
+    cells += "<td>" + (R.fail ? "" : [R.calls ? "calls" : "", R.logs ? "logs" : ""].filter(Boolean).join(" + ")) + '</td><td class="r">' + (R.maxMulticallSize || "") +
+      '</td><td class="r">' + (R.logs ? R.maxLogRange.toLocaleString("en-US") : "") + "</td><td>" + (R.logs ? (R.depthOk && R.logDepth == null ? '<span class="ok">full</span>' : R.depthOk ? '<span class="warn">~' + R.logDepth.toLocaleString("en-US") + " blocks</span>" : '<span class="err">no</span>') : "") + "</td>";
+  }
+  cells += '<td class="r">' + (R.fail ? "" : R.maxRps) + '</td><td class="r">' + (R.fail ? "" : R.weight) + '</td><td class="note">' + esc(R.notes.join("; ")) + "</td>";
+  return cells;
+}
+
+function output() {
+  var date = new Date().toISOString().slice(0, 10);
+  var parts = [];
+  Object.keys(RESULTS).forEach(function (k) {
+    var c = CHAINS[k];
+    var ok = RESULTS[k].filter(function (r) { return !r.fail; });
+    var bad = RESULTS[k].filter(function (r) { return r.fail; });
+    // config order: full log history first, then short logs, then calls only
+    ok.sort(function (a, b) { var s = function (r) { return r.logs ? (r.depthOk && r.logDepth == null ? 0 : 1) * 10 + (r.maxLogRange >= 10000 ? 0 : 1) : 50; }; return s(a) - s(b) || (a.p50 || 0) - (b.p50 || 0); });
+    var lines = ["// " + c.label + " - tested " + date + " from this browser (" + ok.length + " usable, " + bad.length + " rejected)", k + ": {", "  endpoints: ["];
+    ok.forEach(function (r) {
+      lines.push("    // p50 " + r.p50 + " ms" + (r.notes.length ? " - " + r.notes.join("; ") : ""));
+      lines.push("    " + (c.type === "evm" ? evmConfig(r) : simpleConfig(r)).replace(/\n/g, "\n    "));
+    });
+    bad.forEach(function (r) { lines.push("    // rejected: " + r.url + " - " + r.fail); });
+    lines.push("  ],", "},");
+    parts.push(lines.join("\n"));
+  });
+  document.getElementById("out").textContent = parts.join("\n\n");
+  document.getElementById("out-note").textContent = "Paste each block's endpoints into config.js -> chains.<chain>.endpoints (Base: add a full chain entry, see README).";
+}
+
+document.getElementById("copy").addEventListener("click", function () {
+  var t = document.getElementById("out").textContent;
+  (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { document.getElementById("copy").textContent = "Copied"; setTimeout(function () { document.getElementById("copy").textContent = "Copy"; }, 1200); })
+    .catch(function () { var r = document.createRange(); r.selectNodeContents(document.getElementById("out")); var s = getSelection(); s.removeAllRanges(); s.addRange(r); });
+});
+render();
+</script>
+</body>
+</html>
