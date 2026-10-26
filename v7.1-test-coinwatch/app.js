@@ -629,6 +629,13 @@ export async function loadConfig() {
   }
   for (const k of ["npm", "tickLens"]) if (!isHexAddress(UNISWAP[k])) errors.push(`uniswap.${k}: invalid address`);
 
+  const reports = C.coinwatch?.reports;
+  if (!Array.isArray(reports) || !reports.length) warnings.push("coinwatch.reports: missing or empty in config.js (Coinwatch page)");
+  for (const r of reports || []) {
+    if (!/^[a-z0-9-]+$/.test(r.slug || "")) errors.push(`coinwatch.reports: missing or invalid slug for ${r.label || r.url} (lowercase letters, digits, "-")`);
+    if (!/^https:\/\//.test(r.url || "")) errors.push(`coinwatch.reports: invalid url for ${r.label || r.slug}`);
+  }
+
   const known = await loadKnownAddresses();
   if (known.error) warnings.push(known.error);
 
@@ -640,6 +647,7 @@ export async function loadConfig() {
     tokens: TOKENS,
     morpho: MORPHO,
     uniswap: UNISWAP,
+    coinwatch: C.coinwatch || { reports: [] },
     logos: C.logos || {},
     known: known.data,
     settings,
