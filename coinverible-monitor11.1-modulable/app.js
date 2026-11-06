@@ -5191,7 +5191,7 @@ export class UI {
 
   setPage(page, sub = null) {
     const changed = page !== this.page || sub !== this.sub;
-    if (changed) { this.areaLeave(); this.tip?.hide(); if (this._editing) this.setEditing(false, false); }
+    if (changed) { this.areaLeave(); this.tip?.hide(); if (this._editing) this.setEditing(false, false); this._pageChanged = true; }
     this.page = page;
     this.sub = sub;
     this.root.querySelectorAll(".nav").forEach((a) => a.classList.toggle("active", a.getAttribute("data-page") === page));
@@ -5228,14 +5228,32 @@ export class UI {
         if (el.scrollTop || el.scrollLeft) keep[`w:${it.getAttribute("data-wid")}:${i}`] = [el.scrollTop, el.scrollLeft];
       }));
       this._wdefs = null;
+      this._wparts = null;
       const html = p === "monitoring" ? this.monitoring() : p === "morpho" ? this.morpho() : p === "uniswap" ? this.uniswap() : this.coinwatch();
+      const sy = scrollY;
       if (html !== this._lastHtml || this.content.childElementCount === 0) {
-        this.content.innerHTML = html;
+        const parts = this._wparts, cur = this._wpartsDom;
+        const grid = this.content.querySelector(".wgrid");
+        if (parts && cur && grid && parts.page === cur.page && parts.key === cur.key && parts.editing === cur.editing) {
+          // same widgets: replace only the parts whose HTML changed (the grid and the frames stay)
+          if (parts.head !== cur.head) this.content.querySelector(".w-pagehead").innerHTML = parts.head;
+          if (parts.foot !== cur.foot) this.content.querySelector(".w-pagefoot").innerHTML = parts.foot;
+          for (const [id, h] of parts.inner) if (h !== cur.inner.get(id)) { const el = grid.querySelector(`:scope > [data-wid="${CSS.escape(id)}"] > .w-in`); if (el) el.innerHTML = h; }
+        } else {
+          // new page / widgets: the page keeps its height until the widgets are placed, so the browser
+          // does not clamp the scroll position while the new grid has no height yet
+          this.content.style.minHeight = `${this.content.offsetHeight}px`;
+          this.content.innerHTML = html;
+        }
         this._lastHtml = html;
+        this._wpartsDom = parts;
         this._wdefsDom = this._wdefs;
         this._wpageDom = this._wdefs ? this._wpage : null;
       }
       this.applyLayout();
+      if (this.content.style.minHeight) this.content.style.minHeight = "";
+      if (scrollY !== sy && !this._pageChanged) scrollTo(scrollX, sy);
+      this._pageChanged = false;
       const put = (el, v) => { if (!v) return; el.scrollTop = v[0]; el.scrollLeft = v[1]; };
       this.content.querySelectorAll("[data-keep]").forEach((el) => put(el, keep[el.getAttribute("data-keep")]));
       this.content.querySelectorAll(".w-item").forEach((it) => it.querySelectorAll(".w-body, .card, .tbl").forEach((el, i) => put(el, keep[`w:${it.getAttribute("data-wid")}:${i}`])));
@@ -5393,16 +5411,25 @@ export class UI {
     this._wpage = page;
     this._wdefs = ws.map(({ id, label, w, minPx, minH }) => ({ id, label, w, minPx, minH }));
     const hidden = new Set(this.layouts.pages[page]?.hidden || []);
-    return `${head || ""}<div class="wgrid settling" data-grid="${esc(page)}">${ws.filter((w) => !hidden.has(w.id)).map((w) => this.widgetHtml(w)).join("")}</div>${foot || ""}`;
+    const shown = ws.filter((w) => !hidden.has(w.id));
+    // parts, so that a data refresh only replaces what changed (render: keyed update)
+    const inner = shown.map((w) => [w.id, this.widgetInner(w)]);
+    this._wparts = { page, head: head || "", foot: foot || "", editing: !!this._editing, key: inner.map(([id, x]) => `${id}${x.head ? "+h" : ""}`).join(","), inner: new Map(inner.map(([id, x]) => [id, x.html])) };
+    return `<div class="w-pagehead">${head || ""}</div><div class="wgrid settling" data-grid="${esc(page)}">${shown.map((w) => this.widgetHtml(w, inner.find((x) => x[0] === w.id)[1])).join("")}</div><div class="w-pagefoot">${foot || ""}</div>`;
   }
 
-  widgetHtml(w) {
+  /** Content of a widget (header + body), without its frame. */
+  widgetInner(w) {
     const head = w.head ?? (w.title ? `<div class="sec-head w-head"><h2>${w.title}</h2>${w.sub ? `<span>${w.sub}</span>` : ""}${w.tools || ""}</div>` : "");
+    return { head: !!head, html: `${head}<div class="w-body">${w.body}</div>` };
+  }
+
+  widgetHtml(w, inner) {
     const ov = this._editing ? `<div class="w-ov" tabindex="0" role="group" aria-label="${esc(w.label)}: drag to move; arrow keys move, Shift + arrow keys resize">
         <span class="w-chip">${icon("grip")}<b>${esc(w.label)}</b><span class="w-size"></span></span>
         <span class="w-acts"><button class="w-act w-fit" data-wfit${tipAttr("Fit the height to the content")}>${icon("fold")}</button><button class="w-act" data-whide${tipAttr("Hide (Hidden menu below to show it again)")}>${icon("eyeOff")}</button></span>
         <span class="w-rs e" data-wrs="e"></span><span class="w-rs s" data-wrs="s"></span><span class="w-rs se" data-wrs="se"></span></div>` : "";
-    return `<div class="w-item${head ? " has-head" : ""}" data-wid="${esc(w.id)}"><div class="w-in">${head}<div class="w-body">${w.body}</div></div>${ov}</div>`;
+    return `<div class="w-item${inner.head ? " has-head" : ""}" data-wid="${esc(w.id)}"><div class="w-in">${inner.html}</div>${ov}</div>`;
   }
 
   /**
@@ -5414,7 +5441,7 @@ export class UI {
     const grid = /** @type {HTMLElement|null} */ (this.content.querySelector(".wgrid"));
     const defs = grid ? this._wdefsDom : null;
     if (!grid || !defs) { this._grid = null; this.observeLayout(null); return; }
-    const W = grid.clientWidth;
+    const W = this.layoutWidth(grid.clientWidth);
     if (!W) return;
     const page = this._wpageDom;
     const bp = gridBp(W), colW = colWidth(W, bp), step = colW + bp.gap;
@@ -5445,6 +5472,27 @@ export class UI {
     // the liquidity chart is drawn at its box size: redraw it when the widget size changed
     const ch = /** @type {HTMLElement|null} */ (grid.querySelector("[data-chart]"));
     if (ch) { const k = `${ch.clientWidth}x${ch.clientHeight}`; if (k !== this._chartKey) { this._chartKey = k; this.drawCharts(); } }
+  }
+
+  /**
+   * Width used to place the widgets. Guard against a feedback loop: if the grid keeps switching between
+   * two widths (a scrollbar shown by the taller layout, hidden by the shorter one), the narrower one is kept
+   * until the width really changes.
+   */
+  layoutWidth(w) {
+    const now = performance.now(), h = (this._wHist ||= []);
+    if (!h.length || h[h.length - 1].w !== w) h.push({ w, t: now });
+    while (h.length > 6) h.shift();
+    const n = h.length;
+    if (this._wLock) {
+      if (w === this._wLock.a || w === this._wLock.b) return Math.min(this._wLock.a, this._wLock.b);
+      this._wLock = null;
+    }
+    if (n >= 4 && h[n - 1].w === h[n - 3].w && h[n - 2].w === h[n - 4].w && Math.abs(h[n - 1].w - h[n - 2].w) <= 24 && now - h[n - 4].t < 1500) {
+      this._wLock = { a: h[n - 1].w, b: h[n - 2].w };
+      return Math.min(w, h[n - 2].w);
+    }
+    return w;
   }
 
   /** Re-place the widgets when the grid width (window, sidebar) or a widget's content changes size. */
@@ -6626,7 +6674,7 @@ export class UI {
     const d = this.uniData();
     this.content.querySelectorAll("[data-chart]").forEach((el) => {
       const p = d?.pools.find((x) => x.slug === el.getAttribute("data-chart"));
-      el.innerHTML = p?.ready ? this.chartSvg(p, el.clientWidth || 900, Math.max(160, el.clientHeight || 260)) : "";
+      el.innerHTML = p?.ready ? this.chartSvg(p, Math.floor(el.clientWidth) || 900, Math.max(160, Math.floor(el.clientHeight) || 260)) : "";
     });
     this.tip?.refresh();
   }

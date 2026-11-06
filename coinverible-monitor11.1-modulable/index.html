@@ -43,6 +43,8 @@
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; }
+    /* the page scrollbar always has its room: its appearing / disappearing never changes the page width */
+    html { scrollbar-gutter: stable; }
     body { background: var(--background); color: var(--foreground); font: 400 14px/20px var(--font); font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
     a { color: inherit; text-decoration: none; }
     button { font: inherit; color: inherit; }
@@ -706,7 +708,7 @@
     .w-item.fixed .w-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
     .w-item.fixed .w-body > .card:only-child { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
     .w-item.fixed .w-body > .card:only-child > .tbl { flex: 1; min-height: 0; overflow: auto; }
-    .w-item.fixed .w-body > .chart-card > .chart { flex: 1; height: auto; min-height: 160px; }
+    .w-item.fixed .w-body > .chart-card > .chart { flex: 1; height: auto; min-height: 160px; overflow: hidden; }
     .w-item.fixed .list { max-height: none; }
     .w-item.fixed thead th { position: sticky; top: 0; z-index: 1; }
     .w-item.fixed .w-body::-webkit-scrollbar, .w-item.fixed .tbl::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -721,7 +723,7 @@
       background: repeating-linear-gradient(90deg, var(--edit-col) 0, var(--edit-col) var(--colw), transparent var(--colw), transparent calc(var(--colw) + var(--gap))); }
     .app.editing .w-in { pointer-events: none; user-select: none; -webkit-user-select: none; }
     .app.editing .has-head .w-in > :first-child { visibility: hidden; }
-    .app.editing .wgrid:not(.settling) .w-item:not(.active) { transition: transform 220ms cubic-bezier(.2, .7, .2, 1), width 220ms cubic-bezier(.2, .7, .2, 1), height 220ms cubic-bezier(.2, .7, .2, 1); }
+    .app.editing .wgrid:not(.settling) .w-item:not(.active) { transition: transform 220ms cubic-bezier(.2, .7, .2, 1); }
     .w-ov { position: absolute; inset: 0; z-index: 2; border: 1px dashed var(--edit-line); border-radius: var(--radius); background: var(--edit-tint); cursor: grab; touch-action: pan-y; transition: border-color var(--ease), background var(--ease), box-shadow var(--ease); }
     .w-ov:hover { border-style: solid; border-color: rgba(233, 4, 30, 0.5); background: var(--edit-tint-hover); }
     .w-ov:focus-visible { outline: none; border-style: solid; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(233, 4, 30, 0.22); }
